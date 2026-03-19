@@ -223,14 +223,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const baseUrl = process.env.BAILIAN_BASE_URL || 'https://coding.dashscope.aliyuncs.com/v1';
-    const apiKey = process.env.BAILIAN_API_KEY;
+    const baseUrl =
+      process.env.BAILIAN_BASE_URL ||
+      process.env.DASHSCOPE_BASE_URL ||
+      'https://coding.dashscope.aliyuncs.com/v1';
+    const apiKey =
+      process.env.BAILIAN_API_KEY ||
+      process.env.DASHSCOPE_API_KEY ||
+      process.env.OPENAI_API_KEY;
+    const sharedApiBaseUrl = process.env.SHARED_AI_BASE_URL;
 
     if (!apiKey) {
+      if (sharedApiBaseUrl) {
+        const hasProxied = request.headers.get('x-shared-proxy-hop') === '1';
+
+        if (hasProxied) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: '共享 AI 服务不可用，请联系管理员检查 SHARED_AI_BASE_URL。',
+            },
+            { status: 502 }
+          );
+        }
+
+        try {
+          const proxyUrl = `${sharedApiBaseUrl.replace(/\/$/, '')}/api/ai/chat`;
+          const proxyResponse = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-shared-proxy-hop': '1',
+            },
+            body: JSON.stringify(body),
+          });
+
+          const proxyData = await proxyResponse.json();
+          return NextResponse.json(proxyData, { status: proxyResponse.status });
+        } catch (error) {
+          console.error('Shared AI Proxy Error:', error);
+          return NextResponse.json(
+            {
+              success: false,
+              error: '共享 AI 服务调用失败，请检查 SHARED_AI_BASE_URL。',
+            },
+            { status: 502 }
+          );
+        }
+      }
+
       return NextResponse.json(
         {
           success: false,
-          error: '未配置 BAILIAN_API_KEY，请先在 .env.local 中配置。',
+          error:
+            '未配置 API Key。请配置 BAILIAN_API_KEY（或 DASHSCOPE_API_KEY），或设置 SHARED_AI_BASE_URL 使用共享服务。',
         },
         { status: 500 }
       );

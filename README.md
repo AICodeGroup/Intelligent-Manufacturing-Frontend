@@ -4,6 +4,28 @@
 
 ## 快速开始
 
+### 团队协作环境变量（大模型）
+
+本项目不会提交 `.env.local`（已在 `.gitignore` 中忽略）。
+每位同学都需要在本地单独配置自己的 API Key：
+
+```bash
+cp .env.example .env.local
+```
+
+然后在 `.env.local` 中填写：
+
+- `BAILIAN_API_KEY`（推荐）
+- 或 `DASHSCOPE_API_KEY`（兼容）
+
+如果希望“同仓库成员本地无需配置 Key 也能直接用”，可额外配置：
+
+- `SHARED_AI_BASE_URL`（例如你们已部署好的线上域名）
+
+这样本地后端会在未配置本地 Key 时，自动代理到共享线上 AI 服务。
+
+未配置时，AI 接口会返回明确提示，不会使用仓库中的固定密钥。
+
 ### 启动开发服务器
 
 ```bash
