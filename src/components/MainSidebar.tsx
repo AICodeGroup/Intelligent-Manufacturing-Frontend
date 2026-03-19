@@ -24,9 +24,9 @@ import { useState } from 'react';
 const productStructure = {
   main: {
     id: 'knowledge-system',
-    name: '智能知识管理系统',
+    name: '未来未科技 · 智能知识管理系统',
     icon: Building2,
-    description: '知识图谱 + 企业知识库 + 多部门AI问答助手',
+    description: '知识图谱 / 企业知识库 / 多部门AI问答助手',
     gradient: 'from-blue-500 via-purple-500 to-pink-500',
     subModules: [
       {
@@ -149,7 +149,7 @@ export default function MainSidebar({
                 <Building2 className="w-4 h-4" />
               </div>
               <span className="font-semibold text-sm text-gray-700 dark:text-gray-300">
-                智能知识管理系统
+              未来未科技 · 智能知识管理系统
               </span>
             </div>
             {expandedMain ? (

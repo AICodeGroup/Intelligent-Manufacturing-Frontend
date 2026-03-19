@@ -98,11 +98,11 @@ export default function KnowledgeSystemPage({ onModuleClick }: KnowledgeSystemPa
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-medium mb-6 shadow-lg">
               <Sparkles className="w-4 h-4" />
-              <span>智能知识管理系统</span>
+              <span>未来未科技 · 智能知识管理系统</span>
             </div>
             
             <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-6">
-              知识图谱 + 企业知识库 + 多部门AI问答助手
+              知识图谱 / 企业知识库 / 多部门AI问答助手
             </h1>
             
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-4xl mx-auto leading-relaxed">
