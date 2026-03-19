@@ -6,19 +6,15 @@ import { cn } from '@/lib/utils';
 import { 
   Send, 
   Mic, 
-  Image, 
+  Image as ImageIcon, 
   Paperclip,
   Bot,
   User,
   Sparkles,
   ChevronLeft,
-  FileText,
-  Clock,
   ThumbsUp,
   ThumbsDown,
-  Copy,
-  RotateCcw,
-  MoreHorizontal
+  Copy
 } from 'lucide-react';
 import { aiAssistants, aiResponses } from '@/lib/demo-data';
 import { Button } from '@/components/ui/button';
@@ -50,11 +46,20 @@ const colorMap: Record<string, { bg: string; text: string; gradient: string }> =
 
 export default function AIAssistantChat({ assistantId = 'assistant-production', onBack }: AIAssistantChatProps) {
   const [selectedAssistant, setSelectedAssistant] = useState(assistantId);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const defaultResponse = aiResponses[assistantId]?.default || '您好，有什么可以帮助您的？';
+    return [{
+      id: '1',
+      role: 'assistant',
+      content: defaultResponse,
+      timestamp: new Date(),
+    }];
+  });
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const nextIdRef = useRef(2);
 
   const assistant = aiAssistants.find(a => a.id === selectedAssistant)!;
   const colorStyle = colorMap[assistant.color];
@@ -68,26 +73,31 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
     scrollToBottom();
   }, [messages]);
 
-  // 初始化欢迎消息
-  useEffect(() => {
-    const defaultResponse = aiResponses[selectedAssistant]?.default || '您好，有什么可以帮助您的？';
+  const handleSelectAssistant = (id: string) => {
+    setSelectedAssistant(id);
+    setIsTyping(false);
+    setInputValue('');
+    nextIdRef.current = 2;
+
+    const defaultResponse = aiResponses[id]?.default || '您好，有什么可以帮助您的？';
     setMessages([{
       id: '1',
       role: 'assistant',
       content: defaultResponse,
       timestamp: new Date(),
     }]);
-  }, [selectedAssistant]);
+  };
 
   // 发送消息
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
+    const trimmed = content.trim();
 
     // 添加用户消息
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: String(nextIdRef.current++),
       role: 'user',
-      content: content.trim(),
+      content: trimmed,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
@@ -96,11 +106,10 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
 
     // 模拟AI响应
     setTimeout(() => {
-      const response = aiResponses[selectedAssistant]?.[content.trim()] || 
-        generateDefaultResponse(content);
+      const response = aiResponses[selectedAssistant]?.[trimmed] || generateDefaultResponse(trimmed);
       
       const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: String(nextIdRef.current++),
         role: 'assistant',
         content: response,
         timestamp: new Date(),
@@ -108,7 +117,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
       };
       setMessages(prev => [...prev, assistantMessage]);
       setIsTyping(false);
-    }, 800 + Math.random() * 500);
+    }, 800 + Math.min(500, trimmed.length * 20));
   };
 
   // 生成默认回复
@@ -127,9 +136,9 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       {/* 左侧助手列表 */}
-      <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+      <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col min-h-0">
         {/* 标题 */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2">
@@ -140,7 +149,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
         </div>
 
         {/* 助手列表 */}
-        <ScrollArea className="flex-1 p-3">
+        <ScrollArea className="flex-1 min-h-0 p-3">
           <div className="space-y-2">
             {aiAssistants.map((asst) => {
               const style = colorMap[asst.color];
@@ -149,7 +158,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
                   key={asst.id}
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
-                  onClick={() => setSelectedAssistant(asst.id)}
+                  onClick={() => handleSelectAssistant(asst.id)}
                   className={cn(
                     'w-full p-3 rounded-xl text-left transition-all border-2',
                     selectedAssistant === asst.id
@@ -189,7 +198,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
       </div>
 
       {/* 右侧对话区 */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* 对话头部 */}
         <div className={cn(
           'px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r',
@@ -226,7 +235,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
         </div>
 
         {/* 消息列表 */}
-        <ScrollArea className="flex-1 p-6">
+        <ScrollArea className="flex-1 min-h-0 p-6">
           <div className="max-w-3xl mx-auto space-y-6">
             <AnimatePresence mode="popLayout">
               {messages.map((message) => (
@@ -365,7 +374,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
             <div className="flex items-center gap-3">
               <div className="flex gap-1">
                 <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
-                  <Image className="w-5 h-5 text-gray-400" />
+                  <ImageIcon className="w-5 h-5 text-gray-400" />
                 </Button>
                 <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
                   <Paperclip className="w-5 h-5 text-gray-400" />
