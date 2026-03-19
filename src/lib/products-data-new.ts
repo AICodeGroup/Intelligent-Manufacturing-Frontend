@@ -366,13 +366,13 @@ export const aiAssistantData = {
       icon: '📦',
       department: '采购部/供应链部',
       color: 'amber',
-      quickQuestions: ['某物料供应商信息', '物料采购标准', '库存查询', '供应链流程', '物料与工艺匹配要求'],
+      quickQuestions: ['某物料供应商信息', '物料采购标准', '库存查询', '供应链流程', '物料与工艺匹配要求', 'Amazon/Walmart/Target 比价'],
       plugins: [
-        { name: '供应商对比', description: '多维度对比供应商' },
+        { name: '供应商对比', description: '多维度对比供应商与平台价格' },
         { name: '物料匹配推荐', description: '适配生产工艺的物料推荐' },
         { name: '库存预警同步', description: '实时库存预警' },
       ],
-      capabilities: ['物料与生产/工艺/设备关联解答', '采购标准精准匹配']
+      capabilities: ['物料与生产/工艺/设备关联解答', '采购标准精准匹配', '多平台价格与供应商查询']
     },
   ],
   backendModules: [

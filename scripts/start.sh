@@ -1,7 +1,8 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-COZE_WORKSPACE_PATH="${COZE_WORKSPACE_PATH:-$(pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COZE_WORKSPACE_PATH="${COZE_WORKSPACE_PATH:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 PORT=5002
 DEPLOY_RUN_PORT="${DEPLOY_RUN_PORT:-$PORT}"
 

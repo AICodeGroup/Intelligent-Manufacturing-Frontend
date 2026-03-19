@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 PORT=5002
-COZE_WORKSPACE_PATH="${COZE_WORKSPACE_PATH:-$(pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COZE_WORKSPACE_PATH="${COZE_WORKSPACE_PATH:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 NODE_ENV=development
 DEPLOY_RUN_PORT=5002
 

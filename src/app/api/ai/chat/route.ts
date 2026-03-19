@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { knowledgeData } from '@/lib/demo-data';
+import { crawlMarketPrices, formatMarketSnapshot } from '@/lib/market-crawler';
+import { formatWebSearchSnapshot, searchWeb } from '@/lib/web-search';
 
 type ChatRole = 'system' | 'user' | 'assistant';
 
@@ -12,6 +14,17 @@ interface AssistantConfig {
   name: string;
   model: string;
   systemPrompt: string;
+}
+
+interface StreamPayload {
+  answer: string;
+  model: string;
+  assistantName: string;
+  kbMatched: boolean;
+  webMatched: boolean;
+  references: { id: string; title: string }[];
+  webSearchDebug: Array<{ source: string; status?: number; message: string }> | null;
+  marketDebug: Array<{ source: string; status?: number; message: string }> | null;
 }
 
 function uniqueModels(models: string[]): string[] {
@@ -78,6 +91,23 @@ function extractAnswerFromModelResponse(data: any): string {
   return '';
 }
 
+function toPlainTextDocument(input: string): string {
+  return input
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, ''))
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '• ')
+    .replace(/^\s*>\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\|/gm, '')
+    .replace(/\|$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 async function callBailianChat(params: {
   baseUrl: string;
   apiKey: string;
@@ -99,10 +129,242 @@ async function callBailianChat(params: {
   });
 }
 
+function createSseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function splitIntoChunks(input: string, size = 24): string[] {
+  const chars = Array.from(input);
+  const chunks: string[] = [];
+
+  for (let index = 0; index < chars.length; index += size) {
+    chunks.push(chars.slice(index, index + size).join(''));
+  }
+
+  return chunks;
+}
+
+function createStreamingResponse(payload: StreamPayload): Response {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(encoder.encode(createSseEvent('meta', {
+        model: payload.model,
+        assistantName: payload.assistantName,
+        kbMatched: payload.kbMatched,
+        webMatched: payload.webMatched,
+        references: payload.references,
+        webSearchDebug: payload.webSearchDebug,
+        marketDebug: payload.marketDebug,
+      })));
+
+      for (const chunk of splitIntoChunks(payload.answer)) {
+        controller.enqueue(encoder.encode(createSseEvent('delta', { content: chunk })));
+        await new Promise((resolve) => setTimeout(resolve, 12));
+      }
+
+      controller.enqueue(encoder.encode(createSseEvent('done', {
+        answer: payload.answer,
+        model: payload.model,
+        assistantName: payload.assistantName,
+        kbMatched: payload.kbMatched,
+        webMatched: payload.webMatched,
+        references: payload.references,
+        webSearchDebug: payload.webSearchDebug,
+        marketDebug: payload.marketDebug,
+      })));
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+}
+
+async function generateChatPayload(params: {
+  message: string;
+  assistantId?: string;
+  assistantName?: string;
+  history?: ChatMessage[];
+  assistantConfig: AssistantConfig;
+  baseUrl: string;
+  apiKey: string;
+}): Promise<StreamPayload> {
+  const { message, assistantId, assistantName, history, assistantConfig, baseUrl, apiKey } = params;
+
+  const [kbHits, webSearchSnapshot, procurementMarketSnapshot] = await Promise.all([
+    Promise.resolve(searchKnowledge(message)),
+    searchWeb(message),
+    assistantId === 'assistant-procurement' ? crawlMarketPrices(message) : Promise.resolve(null),
+  ]);
+
+  const hasKbMatch = kbHits.length > 0;
+  const hasWebSearchMatch = webSearchSnapshot.items.length > 0;
+
+  const knowledgePrompt = hasKbMatch
+    ? `以下是企业知识库命中内容，请优先基于它回答，避免编造：\n\n${kbHits
+        .map(
+          (hit, index) =>
+            `${index + 1}. [${hit.id}] ${hit.title}\n${hit.content.slice(0, 600)}`
+        )
+        .join('\n\n')}\n\n回答要求：\n- 先直接回答用户问题\n- 若引用了知识库，请在结尾用“参考资料：xxx”列出标题`
+    : '当前企业知识库未命中与用户问题直接相关的内容。请基于通用知识直接回答用户问题，明确、简洁，不要虚构企业内部文档。';
+
+  const webSearchPrompt = hasWebSearchMatch
+    ? `以下是联网搜索结果，请把它作为最新外部信息依据，并与知识库或爬虫结果一起综合判断：\n\n${formatWebSearchSnapshot(webSearchSnapshot)}\n\n回答要求：\n- 优先吸收最新搜索结果中的事实信息\n- 如果搜索结果与知识库冲突，请以最新可验证来源为准，并提示差异\n- 不要虚构来源，不确定时要明确说明信息有限`
+    : `当前未抓到可用的联网搜索结果。请基于已有知识直接回答，不要编造外部来源。`;
+
+  const procurementPrompt =
+    assistantId === 'assistant-procurement'
+      ? procurementMarketSnapshot
+        ? `以下是多平台爬虫抓取到的价格/供应商查询结果，请把它作为采购建议的重要依据，并与联网搜索结果一起综合判断：\n\n${formatMarketSnapshot(procurementMarketSnapshot)}\n\n回答要求：\n- 优先给出适合采购决策的结论\n- 对比平台价格、卖家、运费、评分、交期等信息\n- 如果结果不完整，明确提示用户补充品牌、型号、规格或数量`
+        : `当前未能抓取到可用的多平台价格结果。请继续基于采购知识给出建议，并在回答中明确说明：系统支持对 Amazon、Google、Walmart、Target、eBay、淘宝、拼多多、京东等平台进行价格抓取。`
+      : '';
+
+  const safeHistory = Array.isArray(history)
+    ? history
+        .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
+        .slice(-8)
+        .map((item) => ({ role: item.role, content: String(item.content || '') }))
+    : [];
+
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: `${assistantConfig.systemPrompt}\n\n${knowledgePrompt}\n\n${webSearchPrompt}${procurementPrompt ? `\n\n${procurementPrompt}` : ''}`,
+    },
+    ...safeHistory,
+    {
+      role: 'user',
+      content: message,
+    },
+  ];
+
+  const candidateModels = buildCandidateModels(assistantConfig.model);
+
+  let data: any = null;
+  let usedModel = candidateModels[0];
+  let lastErrorText = '';
+
+  for (const model of candidateModels) {
+    const upstreamResponse = await callBailianChat({
+      baseUrl,
+      apiKey,
+      model,
+      messages,
+    });
+
+    if (upstreamResponse.ok) {
+      data = await upstreamResponse.json();
+      usedModel = model;
+      break;
+    }
+
+    lastErrorText = await upstreamResponse.text();
+    console.error(`Bailian API Error [${model}]:`, lastErrorText);
+  }
+
+  if (!data) {
+    throw new Error(lastErrorText || '大模型服务调用失败，请稍后重试。');
+  }
+
+  const answer = toPlainTextDocument(extractAnswerFromModelResponse(data));
+
+  if (!answer) {
+    console.error('Bailian Empty Content:', JSON.stringify(data));
+    throw new Error('大模型返回内容为空。');
+  }
+
+  return {
+    answer,
+    model: usedModel,
+    assistantName: assistantConfig.name,
+    kbMatched: hasKbMatch,
+    webMatched: hasWebSearchMatch,
+    references: kbHits.map((hit) => ({ id: hit.id, title: hit.title })),
+    webSearchDebug: webSearchSnapshot.debug || null,
+    marketDebug: procurementMarketSnapshot?.debug || null,
+  };
+}
+
+function createLiveStreamingChatResponse(params: {
+  message: string;
+  assistantId?: string;
+  assistantName?: string;
+  history?: ChatMessage[];
+  assistantConfig: AssistantConfig;
+  baseUrl: string;
+  apiKey: string;
+}): Response {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(encoder.encode(createSseEvent('meta', { status: 'started' })));
+      controller.enqueue(encoder.encode(createSseEvent('delta', { content: '正在联网搜索并生成回复，请稍候…\n\n' })));
+
+      try {
+        const payload = await generateChatPayload(params);
+
+        controller.enqueue(encoder.encode(createSseEvent('meta', {
+          model: payload.model,
+          assistantName: payload.assistantName,
+          kbMatched: payload.kbMatched,
+          webMatched: payload.webMatched,
+          references: payload.references,
+          webSearchDebug: payload.webSearchDebug,
+          marketDebug: payload.marketDebug,
+        })));
+
+        for (const chunk of splitIntoChunks(payload.answer)) {
+          controller.enqueue(encoder.encode(createSseEvent('delta', { content: chunk })));
+          await new Promise((resolve) => setTimeout(resolve, 12));
+        }
+
+        controller.enqueue(encoder.encode(createSseEvent('done', {
+          answer: payload.answer,
+          model: payload.model,
+          assistantName: payload.assistantName,
+          kbMatched: payload.kbMatched,
+          webMatched: payload.webMatched,
+          references: payload.references,
+          webSearchDebug: payload.webSearchDebug,
+          marketDebug: payload.marketDebug,
+        })));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      } catch (error) {
+        controller.enqueue(encoder.encode(createSseEvent('error', {
+          message: error instanceof Error ? error.message : '服务器内部错误，请稍后重试',
+        })));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+}
+
 const assistantConfigs: Record<string, AssistantConfig> = {
   'assistant-rd': {
     name: '研发选型助手',
-    model: 'bailian/qwen3.5-plus',
+    model: 'qwen3.5-plus',
     systemPrompt:
       '你是研发选型助手。你的职责是提供材料选型、技术参数、研发流程建议。回答要专业、结构化，优先给出可执行建议、关键参数范围和注意事项。若信息不足，先提出澄清问题。',
   },
@@ -126,15 +388,15 @@ const assistantConfigs: Record<string, AssistantConfig> = {
   },
   'assistant-hr': {
     name: '人力行政助手',
-    model: 'bailian/qwen3.5-plus',
+    model: 'qwen3.5-plus',
     systemPrompt:
       '你是人力行政助手。你的职责是回答考勤、请假、制度、培训与安全规范问题。回答要规范、明确，涉及制度冲突时请提示以公司最新制度为准。',
   },
   'assistant-procurement': {
     name: '采购供应链助手',
-    model: 'bailian/qwen3.5-plus',
+    model: 'qwen3.5-plus',
     systemPrompt:
-      '你是采购供应链助手。你的职责是提供供应商管理、采购流程、物料与价格比对建议。回答要突出流程节点、风控要点和审批注意事项。',
+      '你是采购供应链助手。你的职责是提供供应商管理、采购流程、物料与价格比对建议。你可以帮助用户对 Amazon、Google、Walmart、Target、eBay，以及国内的淘宝、拼多多、京东等平台做商品价格和供应商信息对比。回答必须使用纯文本文档格式，不要使用 Markdown、表格、代码块、项目符号或链接语法。先给结论，再给可执行步骤，突出流程节点、风控要点和审批注意事项。若用户要采购指导，请按完整流程回答：1) 明确需求与规格；2) 寻找与筛选供应商；3) 多平台比价与交期评估；4) 供应商资质审核；5) 打样/试采验证；6) 商务谈判与定价；7) 合同条款确认；8) 下单与交付跟踪；9) 到货验收；10) 对账结算；11) 供应商复盘与持续优化。注意说明各环节的风险点、所需材料、审批节点和建议模板。',
   },
 };
 
@@ -190,6 +452,7 @@ function searchKnowledge(query: string): KnowledgeHit[] {
   return hits;
 }
 
+
 /**
  * AI Chat API
  * 
@@ -231,52 +494,11 @@ export async function POST(request: NextRequest) {
       process.env.BAILIAN_API_KEY ||
       process.env.DASHSCOPE_API_KEY ||
       process.env.OPENAI_API_KEY;
-    const sharedApiBaseUrl = process.env.SHARED_AI_BASE_URL;
-
     if (!apiKey) {
-      if (sharedApiBaseUrl) {
-        const hasProxied = request.headers.get('x-shared-proxy-hop') === '1';
-
-        if (hasProxied) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: '共享 AI 服务不可用，请联系管理员检查 SHARED_AI_BASE_URL。',
-            },
-            { status: 502 }
-          );
-        }
-
-        try {
-          const proxyUrl = `${sharedApiBaseUrl.replace(/\/$/, '')}/api/ai/chat`;
-          const proxyResponse = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-shared-proxy-hop': '1',
-            },
-            body: JSON.stringify(body),
-          });
-
-          const proxyData = await proxyResponse.json();
-          return NextResponse.json(proxyData, { status: proxyResponse.status });
-        } catch (error) {
-          console.error('Shared AI Proxy Error:', error);
-          return NextResponse.json(
-            {
-              success: false,
-              error: '共享 AI 服务调用失败，请检查 SHARED_AI_BASE_URL。',
-            },
-            { status: 502 }
-          );
-        }
-      }
-
       return NextResponse.json(
         {
           success: false,
-          error:
-            '未配置 API Key。请配置 BAILIAN_API_KEY（或 DASHSCOPE_API_KEY），或设置 SHARED_AI_BASE_URL 使用共享服务。',
+          error: '未配置 API Key。请配置 BAILIAN_API_KEY（或 DASHSCOPE_API_KEY）后再重试。',
         },
         { status: 500 }
       );
@@ -287,94 +509,14 @@ export async function POST(request: NextRequest) {
       (assistantName ? assistantConfigByName.get(assistantName) : undefined) ||
       fallbackAssistantConfig;
 
-    const kbHits = searchKnowledge(message);
-    const hasKbMatch = kbHits.length > 0;
-
-    const knowledgePrompt = hasKbMatch
-      ? `以下是企业知识库命中内容，请优先基于它回答，避免编造：\n\n${kbHits
-          .map(
-            (hit, index) =>
-              `${index + 1}. [${hit.id}] ${hit.title}\n${hit.content.slice(0, 600)}`
-          )
-          .join('\n\n')}\n\n回答要求：\n- 先直接回答用户问题\n- 若引用了知识库，请在结尾用“参考资料：xxx”列出标题`
-      : '当前企业知识库未命中与用户问题直接相关的内容。请基于通用知识直接回答用户问题，明确、简洁，不要虚构企业内部文档。';
-
-    const safeHistory = Array.isArray(history)
-      ? history
-          .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
-          .slice(-8)
-          .map((item) => ({ role: item.role, content: String(item.content || '') }))
-      : [];
-
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `${assistantConfig.systemPrompt}\n\n${knowledgePrompt}`,
-      },
-      ...safeHistory,
-      {
-        role: 'user',
-        content: message,
-      },
-    ];
-
-    const candidateModels = buildCandidateModels(assistantConfig.model);
-
-    let data: any = null;
-    let usedModel = candidateModels[0];
-    let lastErrorText = '';
-
-    for (const model of candidateModels) {
-      const upstreamResponse = await callBailianChat({
-        baseUrl,
-        apiKey,
-        model,
-        messages,
-      });
-
-      if (upstreamResponse.ok) {
-        data = await upstreamResponse.json();
-        usedModel = model;
-        break;
-      }
-
-      lastErrorText = await upstreamResponse.text();
-      console.error(`Bailian API Error [${model}]:`, lastErrorText);
-    }
-
-    if (!data) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: '大模型服务调用失败，请稍后重试。',
-          detail: lastErrorText || undefined,
-        },
-        { status: 502 }
-      );
-    }
-
-    const answer = extractAnswerFromModelResponse(data);
-
-    if (!answer) {
-      console.error('Bailian Empty Content:', JSON.stringify(data));
-      return NextResponse.json(
-        {
-          success: false,
-          error: '大模型返回内容为空。',
-        },
-        { status: 502 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        answer,
-        model: usedModel,
-        assistantName: assistantConfig.name,
-        kbMatched: hasKbMatch,
-        references: kbHits.map((hit) => ({ id: hit.id, title: hit.title })),
-      },
+    return createLiveStreamingChatResponse({
+      message,
+      assistantId,
+      assistantName,
+      history,
+      assistantConfig,
+      baseUrl,
+      apiKey,
     });
 
   } catch (error) {

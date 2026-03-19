@@ -68,9 +68,36 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
   const colorStyle = colorMap[assistant.color];
   const currentMessages = assistantHistories[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)];
 
+  const createMessageId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   // 滚动到底部
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const updateMessage = (assistantKey: string, messageId: string, updater: (message: Message) => Message) => {
+    setAssistantHistories((prev) => {
+      const messages = prev[assistantKey] || [buildWelcomeMessage(assistantKey)];
+
+      return {
+        ...prev,
+        [assistantKey]: messages.map((message) => (message.id === messageId ? updater(message) : message)),
+      };
+    });
+  };
+
+  const parseSseEvent = (chunk: string) => {
+    const lines = chunk.split('\n');
+    const eventLine = lines.find((line) => line.startsWith('event:'));
+    const dataLine = lines.find((line) => line.startsWith('data:'));
+    const eventName = eventLine ? eventLine.replace(/^event:\s*/, '').trim() : 'message';
+    const dataText = dataLine ? dataLine.replace(/^data:\s*/, '').trim() : '';
+
+    try {
+      return { event: eventName, data: dataText ? JSON.parse(dataText) : null };
+    } catch {
+      return { event: eventName, data: dataText };
+    }
   };
 
   useEffect(() => {
@@ -106,17 +133,27 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
     const userInput = content.trim();
+    const assistantMessageId = createMessageId('assistant');
+    const userMessageId = createMessageId('user');
 
-    // 添加用户消息
     const userMessage: Message = {
-      id: String(nextIdRef.current++),
+      id: userMessageId,
       role: 'user',
       content: userInput,
       timestamp: new Date(),
     };
     setAssistantHistories((prev) => ({
       ...prev,
-      [selectedAssistant]: [...(prev[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)]), userMessage],
+      [selectedAssistant]: [
+        ...(prev[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)]),
+        userMessage,
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(),
+        },
+      ],
     }));
     setInputValue('');
     setIsTyping(true);
@@ -138,45 +175,120 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
         }),
       });
 
+      const contentType = response.headers.get('content-type') || '';
+
+      if (!response.ok) {
+        const errorData = contentType.includes('application/json') ? await response.json() : null;
+        const errorMessage =
+          typeof errorData?.error === 'string' && errorData.error.trim()
+            ? errorData.error
+            : '抱歉，当前AI服务暂时不可用，请稍后重试。';
+
+        updateMessage(selectedAssistant, assistantMessageId, (message) => ({
+          ...message,
+          content: errorMessage,
+          timestamp: new Date(),
+        }));
+        return;
+      }
+
+      if (contentType.includes('text/event-stream')) {
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let streamedContent = '';
+
+        if (!reader) {
+          throw new Error('流式响应不可用');
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const rawEvent of events) {
+            if (!rawEvent.trim()) continue;
+
+            if (rawEvent.includes('data: [DONE]')) {
+              continue;
+            }
+
+            const parsed = parseSseEvent(rawEvent);
+            if (parsed.event === 'meta' && parsed.data?.status === 'started') {
+              updateMessage(selectedAssistant, assistantMessageId, (message) => ({
+                ...message,
+                content: message.content || '正在联网搜索并生成回复，请稍候…',
+                timestamp: new Date(),
+              }));
+            }
+
+            if (parsed.event === 'error' && typeof parsed.data?.message === 'string') {
+              updateMessage(selectedAssistant, assistantMessageId, (message) => ({
+                ...message,
+                content: parsed.data.message,
+                timestamp: new Date(),
+              }));
+            }
+
+            if (parsed.event === 'delta' && parsed.data?.content) {
+              streamedContent += String(parsed.data.content);
+              updateMessage(selectedAssistant, assistantMessageId, (message) => ({
+                ...message,
+                content: streamedContent,
+                timestamp: new Date(),
+              }));
+            }
+
+            if (parsed.event === 'done' && parsed.data) {
+              streamedContent = typeof parsed.data.answer === 'string' ? parsed.data.answer : streamedContent;
+              updateMessage(selectedAssistant, assistantMessageId, (message) => ({
+                ...message,
+                content: streamedContent,
+                timestamp: new Date(),
+                references: Array.isArray(parsed.data.references) ? parsed.data.references : message.references,
+              }));
+            }
+          }
+        }
+
+        if (buffer.trim()) {
+          const parsed = parseSseEvent(buffer);
+          if (parsed.event === 'delta' && parsed.data?.content) {
+            streamedContent += String(parsed.data.content);
+          }
+          updateMessage(selectedAssistant, assistantMessageId, (message) => ({
+            ...message,
+            content: streamedContent || message.content,
+            timestamp: new Date(),
+          }));
+        }
+
+        return;
+      }
+
       const result = await response.json();
+      const finalAnswer =
+        typeof result?.data?.answer === 'string' && result.data.answer.trim()
+          ? result.data.answer
+          : '抱歉，当前AI服务暂时不可用，请稍后重试。';
 
-      const answer =
-        response.ok && result?.success
-          ? result?.data?.answer
-          : undefined;
-
-      const errorMessage =
-        typeof result?.error === 'string' && result.error.trim()
-          ? result.error
-          : undefined;
-
-      const finalContent =
-        typeof answer === 'string' && answer.trim()
-          ? answer
-          : errorMessage || '抱歉，当前AI服务暂时不可用，请稍后重试。';
-      const assistantMessage: Message = {
-        id: String(nextIdRef.current++),
-        role: 'assistant',
-        content: finalContent,
+      updateMessage(selectedAssistant, assistantMessageId, (message) => ({
+        ...message,
+        content: finalAnswer,
         timestamp: new Date(),
-        references: [{ id: 'kb-001', title: '相关文档' }],
-      };
-      setAssistantHistories((prev) => ({
-        ...prev,
-        [selectedAssistant]: [...(prev[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)]), assistantMessage],
+        references: Array.isArray(result?.data?.references) ? result.data.references : message.references,
       }));
     } catch (error) {
       console.error('发送消息失败:', error);
 
-      const assistantMessage: Message = {
-        id: String(nextIdRef.current++),
-        role: 'assistant',
+      updateMessage(selectedAssistant, assistantMessageId, (message) => ({
+        ...message,
         content: '抱歉，当前AI服务暂时不可用，请稍后再试。',
         timestamp: new Date(),
-      };
-      setAssistantHistories((prev) => ({
-        ...prev,
-        [selectedAssistant]: [...(prev[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)]), assistantMessage],
       }));
     } finally {
       setIsTyping(false);
@@ -377,7 +489,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
             </AnimatePresence>
 
             {/* 打字中状态 */}
-            {isTyping && (
+            {isTyping && !currentMessages.some((message) => message.role === 'assistant' && !message.content.trim()) && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
