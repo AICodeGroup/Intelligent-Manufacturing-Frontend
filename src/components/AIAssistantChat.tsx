@@ -12,6 +12,7 @@ import {
   User,
   Sparkles,
   ChevronLeft,
+  RotateCcw,
   ThumbsUp,
   ThumbsDown,
   Copy
@@ -35,6 +36,16 @@ interface Message {
   references?: { id: string; title: string }[];
 }
 
+const buildWelcomeMessage = (assistantKey: string): Message => {
+  const defaultResponse = aiResponses[assistantKey]?.default || '您好，有什么可以帮助您的？';
+  return {
+    id: `welcome-${assistantKey}`,
+    role: 'assistant',
+    content: defaultResponse,
+    timestamp: new Date(),
+  };
+};
+
 const colorMap: Record<string, { bg: string; text: string; gradient: string }> = {
   blue: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-400', gradient: 'from-blue-500 to-cyan-500' },
   green: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-600 dark:text-green-400', gradient: 'from-green-500 to-emerald-500' },
@@ -46,15 +57,7 @@ const colorMap: Record<string, { bg: string; text: string; gradient: string }> =
 
 export default function AIAssistantChat({ assistantId = 'assistant-production', onBack }: AIAssistantChatProps) {
   const [selectedAssistant, setSelectedAssistant] = useState(assistantId);
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const defaultResponse = aiResponses[assistantId]?.default || '您好，有什么可以帮助您的？';
-    return [{
-      id: '1',
-      role: 'assistant',
-      content: defaultResponse,
-      timestamp: new Date(),
-    }];
-  });
+  const [assistantHistories, setAssistantHistories] = useState<Record<string, Message[]>>({});
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -63,6 +66,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
 
   const assistant = aiAssistants.find(a => a.id === selectedAssistant)!;
   const colorStyle = colorMap[assistant.color];
+  const currentMessages = assistantHistories[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)];
 
   // 滚动到底部
   const scrollToBottom = () => {
@@ -71,58 +75,112 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [currentMessages]);
 
   const handleSelectAssistant = (id: string) => {
     setSelectedAssistant(id);
     setIsTyping(false);
     setInputValue('');
-    nextIdRef.current = 2;
+    setAssistantHistories((prev) => {
+      if (prev[id]?.length) {
+        return prev;
+      }
 
-    const defaultResponse = aiResponses[id]?.default || '您好，有什么可以帮助您的？';
-    setMessages([{
-      id: '1',
-      role: 'assistant',
-      content: defaultResponse,
-      timestamp: new Date(),
-    }]);
+      return {
+        ...prev,
+        [id]: [buildWelcomeMessage(id)],
+      };
+    });
+  };
+
+  const startNewConversation = () => {
+    setAssistantHistories((prev) => ({
+      ...prev,
+      [selectedAssistant]: [buildWelcomeMessage(selectedAssistant)],
+    }));
+    setInputValue('');
+    setIsTyping(false);
   };
 
   // 发送消息
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
-    const trimmed = content.trim();
+    const userInput = content.trim();
 
     // 添加用户消息
     const userMessage: Message = {
       id: String(nextIdRef.current++),
       role: 'user',
-      content: trimmed,
+      content: userInput,
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, userMessage]);
+    setAssistantHistories((prev) => ({
+      ...prev,
+      [selectedAssistant]: [...(prev[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)]), userMessage],
+    }));
     setInputValue('');
     setIsTyping(true);
 
-    // 模拟AI响应
-    setTimeout(() => {
-      const response = aiResponses[selectedAssistant]?.[trimmed] || generateDefaultResponse(trimmed);
-      
+    try {
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userInput,
+          assistantId: selectedAssistant,
+          assistantName: assistant.name,
+          history: currentMessages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+        }),
+      });
+
+      const result = await response.json();
+
+      const answer =
+        response.ok && result?.success
+          ? result?.data?.answer
+          : undefined;
+
+      const errorMessage =
+        typeof result?.error === 'string' && result.error.trim()
+          ? result.error
+          : undefined;
+
+      const finalContent =
+        typeof answer === 'string' && answer.trim()
+          ? answer
+          : errorMessage || '抱歉，当前AI服务暂时不可用，请稍后重试。';
       const assistantMessage: Message = {
         id: String(nextIdRef.current++),
         role: 'assistant',
-        content: response,
+        content: finalContent,
         timestamp: new Date(),
         references: [{ id: 'kb-001', title: '相关文档' }],
       };
-      setMessages(prev => [...prev, assistantMessage]);
-      setIsTyping(false);
-    }, 800 + Math.min(500, trimmed.length * 20));
-  };
+      setAssistantHistories((prev) => ({
+        ...prev,
+        [selectedAssistant]: [...(prev[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)]), assistantMessage],
+      }));
+    } catch (error) {
+      console.error('发送消息失败:', error);
 
-  // 生成默认回复
-  const generateDefaultResponse = (query: string) => {
-    return `感谢您的提问！关于"${query}"，让我为您查询相关信息...\n\n根据知识库搜索结果，我找到了以下相关信息：\n\n1. 您可以查看相关文档获取详细信息\n2. 如需进一步帮助，请联系相关部门负责人\n\n💡 小提示：您可以尝试更具体的问题描述，我会提供更精准的答案。`;
+      const assistantMessage: Message = {
+        id: String(nextIdRef.current++),
+        role: 'assistant',
+        content: '抱歉，当前AI服务暂时不可用，请稍后再试。',
+        timestamp: new Date(),
+      };
+      setAssistantHistories((prev) => ({
+        ...prev,
+        [selectedAssistant]: [...(prev[selectedAssistant] || [buildWelcomeMessage(selectedAssistant)]), assistantMessage],
+      }));
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   // 处理快捷问题
@@ -141,9 +199,20 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
       <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col min-h-0">
         {/* 标题 */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2">
-            <Bot className="w-6 h-6 text-purple-500" />
-            <h2 className="font-bold text-lg text-gray-900 dark:text-white">AI问答助手</h2>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Bot className="w-6 h-6 text-purple-500" />
+              <h2 className="font-bold text-lg text-gray-900 dark:text-white">AI问答助手</h2>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={startNewConversation}
+              className="h-8 px-2"
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1" />
+              新对话
+            </Button>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">选择助手开始对话</p>
         </div>
@@ -238,7 +307,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
         <ScrollArea className="flex-1 min-h-0 p-6">
           <div className="max-w-3xl mx-auto space-y-6">
             <AnimatePresence mode="popLayout">
-              {messages.map((message) => (
+              {currentMessages.map((message) => (
                 <motion.div
                   key={message.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -346,7 +415,7 @@ export default function AIAssistantChat({ assistantId = 'assistant-production', 
         </ScrollArea>
 
         {/* 快捷问题 */}
-        {messages.length === 1 && (
+        {currentMessages.length === 1 && (
           <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50">
             <div className="max-w-3xl mx-auto">
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1">
