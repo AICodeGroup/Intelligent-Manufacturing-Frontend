@@ -93,8 +93,8 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               className="text-center mb-12"
             >
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-medium mb-6 shadow-lg">
-                <Sparkles className="w-4 h-4" />
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-md font-medium mb-6 shadow-lg">
+                <Sparkles className="w-6 h-6" />
                 <span>未来未科技 · 智能知识管理系统</span>
               </div>
               
@@ -235,7 +235,7 @@ export default function Home() {
   if (currentPage === 'assistant') {
     return (
       <div className="relative">
-        <AIAssistantChat assistantId={selectedAssistant} />
+        <AIAssistantChat assistantId={selectedAssistant} onBack={() => setCurrentPage('home')} />
       </div>
     );
   }

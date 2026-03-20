@@ -9,7 +9,7 @@ import {
   FileText, 
   HelpCircle, 
   Video, 
-  Image,
+  Image as ImageIcon,
   Clock,
   Eye,
   Tag,
@@ -64,7 +64,7 @@ export default function KnowledgePortal({ onOpenAssistant }: KnowledgePortalProp
       case 'document': return <FileText className="w-4 h-4" />;
       case 'faq': return <HelpCircle className="w-4 h-4" />;
       case 'video': return <Video className="w-4 h-4" />;
-      case 'image': return <Image className="w-4 h-4" />;
+      case 'image': return <ImageIcon className="w-4 h-4" />;
       default: return <FileText className="w-4 h-4" />;
     }
   };
@@ -211,13 +211,13 @@ export default function KnowledgePortal({ onOpenAssistant }: KnowledgePortalProp
           
           {/* 搜索框 */}
           <div className="relative max-w-2xl">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
             <Input
               type="text"
               placeholder="搜索知识、文档、FAQ..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-12 pr-12 h-14 text-lg bg-white dark:bg-gray-800 border-0 rounded-xl shadow-lg"
+              className="pl-12 pr-12 h-14 text-lg bg-white dark:bg-gray-800 border-0 rounded-xl shadow-lg text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
             />
             {searchQuery && (
               <button

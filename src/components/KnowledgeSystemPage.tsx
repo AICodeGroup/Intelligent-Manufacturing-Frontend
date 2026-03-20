@@ -102,7 +102,7 @@ export default function KnowledgeSystemPage({ onModuleClick }: KnowledgeSystemPa
             </div>
             
             <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-6">
-              知识图谱 / 企业知识库 / 多部门AI问答助手
+              企业知识库 / 多部门AI问答助手 / 知识图谱 
             </h1>
             
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-4xl mx-auto leading-relaxed">

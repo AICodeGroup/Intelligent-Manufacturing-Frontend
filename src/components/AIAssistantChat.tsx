@@ -2,11 +2,12 @@
 
 import FullLogo from '@/../public/full-logo.svg'; 
 import Image from 'next/image';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Bot,
   ChevronLeft,
+  ChevronRight,
   Copy,
   FileText,
   Image as ImageIcon,
@@ -368,6 +369,7 @@ export default function AIAssistantChat({
   const [assistantHistories, setAssistantHistories] = useState<Record<string, Message[]>>({});
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const traceQueueRef = useRef<Record<string, RetrievalStep[]>>({});
@@ -865,34 +867,94 @@ export default function AIAssistantChat({
     navigator.clipboard.writeText(content);
   };
 
+  const handleGoHome = useCallback(() => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+
+    // Fallback: ensure `app/page.tsx` internal state resets.
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
+  }, [onBack]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-gray-50 via-white to-blue-50/50 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950">
-      <div className="w-80 bg-white/90 dark:bg-gray-900/90 border-r border-gray-200 dark:border-gray-800 flex flex-col min-h-0 backdrop-blur">
+      <div
+        className={cn(
+          'bg-white/90 dark:bg-gray-900/90 border-r border-gray-200 dark:border-gray-800 flex flex-col min-h-0 backdrop-blur transition-[width] duration-200 ease-linear',
+          sidebarExpanded ? 'w-80' : 'w-20'
+        )}
+      >
         
         
-      <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+      <div className="h-[81px] cursor-pointer p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={handleGoHome}
+          className={cn(
+            'flex items-center rounded-xl py-1.5 cursor-pointer bg-gradient-to-r from-blue-500 to-purple-600',
+            sidebarExpanded ? 'gap-3 px-2' : 'gap-0 px-1',
+            'hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60'
+          )}
+          aria-label="返回首页"
+          title="返回首页"
+        >
+          <Image
+            src={FullLogo}
+            alt="FUTUREWAY"
+            width={40}
+            height={40}
+            className={cn('h-8 w-[100px]', sidebarExpanded ? '' : 'h-8 max-w-[44px]')}
+            priority
+          />
 
-<div className="flex items-center justify-between gap-2">
-  <div className="flex items-center gap-2">
-  <a href="" className="flex items-center gap-3">
-    <Image 
-      src={FullLogo} 
-      alt="FUTUREWAY" 
-      width={60} 
-      height={40}
-      className="h-8 w-auto"
-      priority
-    />
-  </a>
-  <h3 className="font-semibold text-lg text-gray-400 dark:text-white">企业智能系统</h3>
-</div>
-</div>
-</div>
+          {sidebarExpanded && (
+            <div className="leading-tight">
+              <h3 className="font-semibold text-md text-white">
+                智能知识管理系统
+              </h3>
+            </div>
+          )} 
+        </button>
 
-<div className="p-4 border-b border-gray-200 dark:border-gray-800">
+              
+        <Button
+          variant="ghost"
+          size="icon"
+          type="button"
+          onClick={() => setSidebarExpanded((v) => !v)}
+          className="ml-4 h-9 w-9 cursor-pointer"
+          aria-label={sidebarExpanded ? '折叠侧边栏' : '展开侧边栏'}
+          title={sidebarExpanded ? '折叠侧边栏' : '展开侧边栏'}
+        >
+          {sidebarExpanded ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </Button>
+      </div>
+
+<div className={cn('p-4 border-b border-gray-200 dark:border-gray-800', sidebarExpanded ? '' : 'hidden')}>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Bot className="w-6 h-6 text-blue-500" />
+            <svg 
+  viewBox="0 0 16 16" 
+  className="w-8 h-8 transition-transform hover:scale-110" 
+  fill="none" 
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <path 
+    d="M8 0L10.16 5.84L16 8L10.16 10.16L8 16L5.84 10.16L0 8L5.84 5.84L8 0Z" 
+    fill="url(#star-gradient)" 
+  />
+  <defs>
+    <linearGradient id="star-gradient" x1="8" y1="0" x2="8" y2="16" gradientUnits="userSpaceOnUse">
+      <stop stopColor="#BF2BE8" />
+      <stop offset="1" stopColor="#FFD6AB" />
+    </linearGradient>
+  </defs>
+</svg>
+              {/* <i data-v-3905c506="" className="el-icon scene-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" fill="none"><path id="Star 1" d="M8 0L10.1607 5.83927L16 8L10.1607 10.1607L8 16L5.83927 10.1607L0 8L5.83927 5.83927L8 0Z" fill="url(#paint0_linear_284_140)"></path><defs><linearGradient id="paint0_linear_284_140" x1="8" y1="0" x2="8" y2="16" gradientUnits="userSpaceOnUse"><stop stop-color="var(--color-lg-from,rgb(191, 43, 232))"></stop><stop offset="1" stop-color="var(--color-lg-to, #FFD6AB)"></stop></linearGradient></defs></svg></i> */}
               <div>
                 <h2 className="font-bold text-lg text-gray-900 dark:text-white">AI问答助手</h2>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -904,11 +966,24 @@ export default function AIAssistantChat({
               <RotateCcw className="w-3.5 h-3.5 mr-1" />
               新对话
             </Button>
+            
           </div>
         </div>
 
-        <ScrollArea className="flex-1 min-h-0 p-3">
-          <div className="space-y-2">
+        <div
+          className={cn(
+            'p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-center',
+            sidebarExpanded ? 'hidden' : ''
+          )}
+        >
+          <Button variant="outline" size="icon" onClick={startNewConversation} aria-label="新对话">
+            <RotateCcw className="w-4 h-4" />
+          </Button>
+        </div>
+        
+
+        <ScrollArea className={cn('flex-1 min-h-0', sidebarExpanded ? 'p-3' : 'p-2')}>
+          <div className={cn('space-y-2', sidebarExpanded ? '' : 'flex flex-col items-center')}>
             {aiAssistants.map((asst) => {
               const style = colorMap[asst.color];
 
@@ -919,13 +994,14 @@ export default function AIAssistantChat({
                   whileTap={{ scale: 0.99 }}
                   onClick={() => handleSelectAssistant(asst.id)}
                   className={cn(
-                    'w-full p-3 rounded-xl text-left transition-all border-2',
+                    'w-full rounded-xl transition-all border-2',
+                    sidebarExpanded ? 'p-3 text-left' : 'p-2',
                     selectedAssistant === asst.id
                       ? `border-transparent bg-gradient-to-r ${style.gradient} text-white shadow-lg`
                       : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700'
                   )}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className={cn('flex items-center gap-3', sidebarExpanded ? '' : 'justify-center gap-0')}>
                     <div
                       className={cn(
                         'w-10 h-10 rounded-lg flex items-center justify-center text-lg',
@@ -934,7 +1010,8 @@ export default function AIAssistantChat({
                     >
                       {asst.avatar}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    {sidebarExpanded && (
+                      <div className="flex-1 min-w-0">
                       <h3
                         className={cn(
                           'font-semibold text-sm truncate',
@@ -955,7 +1032,8 @@ export default function AIAssistantChat({
                       >
                         {asst.department}
                       </p>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </motion.button>
               );
@@ -972,12 +1050,7 @@ export default function AIAssistantChat({
           )}
         >
           <div className="flex items-center gap-3">
-            {onBack && (
-              <Button variant="ghost" size="sm" onClick={onBack} className="text-white hover:bg-white/20">
-                <ChevronLeft className="w-5 h-5" />
-              </Button>
-            )}
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-2xl">
+            <div className="ml-8 w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-2xl">
               {assistant.avatar}
             </div>
             <div className="flex-1">

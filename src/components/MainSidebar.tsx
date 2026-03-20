@@ -26,7 +26,7 @@ const productStructure = {
     id: 'knowledge-system',
     name: '未来未科技 · 智能知识管理系统',
     icon: Building2,
-    description: '知识图谱 / 企业知识库 / 多部门AI问答助手',
+    description: '企业知识库 / 多部门AI问答助手 / 知识图谱 ',
     gradient: 'from-blue-500 via-purple-500 to-pink-500',
     subModules: [
       {
