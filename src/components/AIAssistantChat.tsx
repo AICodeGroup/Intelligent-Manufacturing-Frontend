@@ -1,5 +1,7 @@
 'use client';
 
+import FullLogo from '@/../public/full-logo.svg'; 
+import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -866,7 +868,28 @@ export default function AIAssistantChat({
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-gray-50 via-white to-blue-50/50 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950">
       <div className="w-80 bg-white/90 dark:bg-gray-900/90 border-r border-gray-200 dark:border-gray-800 flex flex-col min-h-0 backdrop-blur">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+        
+        
+      <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+
+<div className="flex items-center justify-between gap-2">
+  <div className="flex items-center gap-2">
+  <a href="" className="flex items-center gap-3">
+    <Image 
+      src={FullLogo} 
+      alt="FUTUREWAY" 
+      width={60} 
+      height={40}
+      className="h-8 w-auto"
+      priority
+    />
+  </a>
+  <h3 className="font-semibold text-lg text-gray-400 dark:text-white">企业智能系统</h3>
+</div>
+</div>
+</div>
+
+<div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Bot className="w-6 h-6 text-blue-500" />

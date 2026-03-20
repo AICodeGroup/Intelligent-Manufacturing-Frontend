@@ -302,28 +302,6 @@ export interface AIAssistant {
 
 export const aiAssistants: AIAssistant[] = [
   {
-    id: 'assistant-rd',
-    name: '研发选型助手',
-    icon: '🔬',
-    department: '研发部',
-    description: '专注材料选型、技术参数查询、研发流程指导',
-    color: 'blue',
-    avatar: '🧪',
-    capabilities: ['材料选型建议', '技术参数查询', '研发流程指导', '案例复盘检索'],
-    quickQuestions: ['某个机械臂关节用什么轴承？', '液冷板流道设计要参考哪些公司规范？', '宁德时代项目里关节过热的根因是什么？']
-  },
-  {
-    id: 'assistant-production',
-    name: '生产工艺助手',
-    icon: '🏭',
-    department: '生产部',
-    description: '专注工艺参数、设备操作、故障处理',
-    color: 'green',
-    avatar: '⚙️',
-    capabilities: ['工艺参数推荐', '设备操作指导', '故障诊断处理', '生产排产查询'],
-    quickQuestions: ['A产线温度参数如何设置？', '设备E002故障怎么处理？', '工艺参数调整流程是什么？']
-  },
-  {
     id: 'assistant-marketing',
     name: '营销问答助手',
     icon: '📈',
@@ -366,7 +344,29 @@ export const aiAssistants: AIAssistant[] = [
     avatar: '📋',
     capabilities: ['供应商查询', '采购流程指引', '物料信息查询', '价格对比'],
     quickQuestions: ['供应商准入流程是什么？', '如何提交采购申请？', '供应商分级标准是什么？']
-  }
+  },
+  {
+    id: 'assistant-production',
+    name: '生产工艺助手',
+    icon: '🏭',
+    department: '生产部',
+    description: '专注工艺参数、设备操作、故障处理',
+    color: 'green',
+    avatar: '⚙️',
+    capabilities: ['工艺参数推荐', '设备操作指导', '故障诊断处理', '生产排产查询'],
+    quickQuestions: ['A产线温度参数如何设置？', '设备E002故障怎么处理？', '工艺参数调整流程是什么？']
+  },
+  {
+    id: 'assistant-rd',
+    name: '研发选型助手',
+    icon: '🔬',
+    department: '研发部',
+    description: '专注材料选型、技术参数查询、研发流程指导',
+    color: 'blue',
+    avatar: '🧪',
+    capabilities: ['材料选型建议', '技术参数查询', '研发流程指导', '案例复盘检索'],
+    quickQuestions: ['某个机械臂关节用什么轴承？', '液冷板流道设计要参考哪些公司规范？', '宁德时代项目里关节过热的根因是什么？']
+  },
 ];
 
 // AI对话预设回复

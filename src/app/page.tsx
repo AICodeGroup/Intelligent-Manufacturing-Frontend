@@ -1,5 +1,7 @@
 'use client';
 
+import FullLogo from '@/../public/full-logo.svg'; 
+import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -29,7 +31,7 @@ type PageType = 'home' | 'knowledge' | 'assistant' | 'config' | 'graph' | 'visio
 
 export default function Home() {
   const [currentPage, setCurrentPage] = useState<PageType>('home');
-  const [selectedAssistant, setSelectedAssistant] = useState<string>('assistant-production');
+  const [selectedAssistant, setSelectedAssistant] = useState<string>('assistant-marketing');
 
   // 导航菜单
   const mainNav = [
@@ -69,11 +71,23 @@ export default function Home() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
         {/* Header */}
         <div className="relative overflow-hidden">
+<div className="flex px-10 pt-8">
+        <a href="" className="flex items-center gap-3">
+    <Image 
+      src={FullLogo} 
+      alt="FUTUREWAY" 
+      width={80} 
+      height={40}
+      className="h-8 w-auto"
+      priority
+    />
+  </a>
+  </div>
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10" />
           <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-pink-500/20 to-orange-500/20 rounded-full blur-3xl" />
           
-          <div className="relative max-w-6xl mx-auto px-8 py-16">
+          <div className="relative max-w-6xl mx-auto px-8 pb-16">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -85,7 +99,7 @@ export default function Home() {
               </div>
               
               <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-6">
-                知识图谱 / 企业知识库 / 多部门AI问答助手
+                 企业知识库 / 多部门AI问答助手 / 知识图谱
               </h1>
               
               <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
@@ -221,16 +235,6 @@ export default function Home() {
   if (currentPage === 'assistant') {
     return (
       <div className="relative">
-        {/* 返回按钮 */}
-        <div className="fixed top-4 left-4 z-50">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentPage('home')}
-            className="bg-white dark:bg-gray-800 shadow-lg"
-          >
-            ← 返回主页
-          </Button>
-        </div>
         <AIAssistantChat assistantId={selectedAssistant} />
       </div>
     );
