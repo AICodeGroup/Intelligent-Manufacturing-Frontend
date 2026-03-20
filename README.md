@@ -16,7 +16,7 @@
 2. 复制示例文件到本地：
 
 ```bash
-cp .env.example .env.local
+cp .env .env.local
 ```
 
 3. 填好自己的模型 Key 后启动项目。
@@ -29,7 +29,7 @@ cp .env.example .env.local
 每位同学都需要在本地单独配置自己的 API Key：
 
 ```bash
-cp .env.example .env.local
+cp .env .env.local
 ```
 
 然后在 `.env.local` 中填写：
