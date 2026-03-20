@@ -33,4 +33,5 @@ ssh root@$SERVER_IP << EOF
     pm2 save
     
     echo "✅ 服务器操作完成！"
-EOFecho "🎉 部署成功！访问地址: https://agent.futureway-ai.com"
+EOF
+echo "🎉 部署成功！访问地址: https://agent.futureway-ai.com"
